@@ -22,19 +22,13 @@ typedef union _packet3{
 // 30 16-bit words
 struct spi_data_t
 {
-    Packet2 q_abad;
-    Packet2 q_hip;
-    Packet2 q_knee;
-    Packet qd_abad;
-    Packet qd_hip;
-    Packet qd_knee;
-    // float q_abad[2];
-    // float q_hip[2];
-    // float q_knee[2];
-    // float qd_abad[2];
-    // float qd_hip[2];
-    // float qd_knee[2];
-    int32_t flags;
+    float q_abad[2];
+    float q_hip[2];
+    float q_knee[2];
+    float qd_abad[2];
+    float qd_hip[2];
+    float qd_knee[2];
+    int32_t flags[2];
     int32_t checksum;
 };
  
