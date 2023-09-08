@@ -350,9 +350,7 @@ int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, fl
 
 	poerror = (upperbound(lowerbound(tar_q)) - angle);
 	verror = (tar_qd - vel);
-	// tau_ff = -0.0056680*pow(2*PI*f,2)*tar_q*625/14;
 	input.data = Kp*poerror + Kd*verror;// + tau_ff + tau_ext;
-    // input.data = 0;
 
     if (input.data > 2000) {
 		input.data = 1999;
@@ -523,7 +521,7 @@ void control(){
     l1_control.a.tau.data = pdcontroller(spi_command.kp_abad[0], spi_command.kd_abad[0], l1_state.a.angle, l1_state.a.vel, spi_command.q_des_abad[0], spi_command.qd_des_abad[0], spi_command.tau_abad_ff[0]);
     l1_control.h.tau.data = pdcontroller(spi_command.kp_hip[0], spi_command.kd_hip[0], l1_state.h.angle, l1_state.h.vel, spi_command.q_des_hip[0], spi_command.qd_des_hip[0], spi_command.tau_hip_ff[0]);
     l1_control.k.tau.data = pdcontroller(spi_command.kp_knee[0], spi_command.kd_knee[0], l1_state.k.angle, l1_state.k.vel, spi_command.q_des_knee[0], spi_command.qd_des_knee[0], spi_command.tau_knee_ff[0]);
-
+    
     l2_control.a.tau.data = pdcontroller(spi_command.kp_abad[1], spi_command.kd_abad[1], l2_state.a.angle, l2_state.a.vel, spi_command.q_des_abad[1], spi_command.qd_des_abad[1], spi_command.tau_abad_ff[1]);
     l2_control.h.tau.data = pdcontroller(spi_command.kp_hip[1], spi_command.kd_hip[1], l2_state.h.angle, l2_state.h.vel, spi_command.q_des_hip[1], spi_command.qd_des_hip[1], spi_command.tau_hip_ff[1]);
     l2_control.k.tau.data = pdcontroller(spi_command.kp_knee[1], spi_command.kd_knee[1], l2_state.k.angle, l2_state.k.vel, spi_command.q_des_knee[1], spi_command.qd_des_knee[1], spi_command.tau_knee_ff[1]);
