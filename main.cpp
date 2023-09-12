@@ -343,23 +343,19 @@ void ExitMotorMode(CANMessage * msg){
 }
 
 int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ff, int cnt){
-	float poerror, poerror2;
+	float poerror;
 	float verror;
 	Packet input;
 
 	poerror = (upperbound(lowerbound(tar_q)) - angle);
-    poerror2 = (upperbound(lowerbound(tar_q)) - angle)+2*PI;
 	verror = (tar_qd - vel);
     
-    if(cnt == 0){
-        // printf("poerror1: %f\r\n", poerror);
-        // printf("poerror2: %f\r\n", poerror2);
-        // if(abs(poerror) > abs(poerror2)){
-        //     input.data = Kp*poerror2 + Kd*verror + tau_ff;
-        // }  
-        // else{input.data = Kp*poerror + Kd*verror + tau_ff;}
-        // printf("Torque: %d\r\n", input.data);
-        printf("Angle:%f \r\n", angle);
+    if(cnt < 1000){
+        if(poerror < -PI){
+            input.data = -Kp*poerror + Kd*verror + tau_ff;
+        }  
+        else{input.data = Kp*poerror + Kd*verror + tau_ff;}
+        
     }
 	else{input.data = Kp*poerror + Kd*verror + tau_ff;}
 
@@ -372,7 +368,6 @@ int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, fl
 	else{
 		input.data = input.data;
 	}
-    
     return input.data;
 }
 
