@@ -343,21 +343,21 @@ void ExitMotorMode(CANMessage * msg){
 }
 
 int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ff, int cnt){
-	float poerror;
+	float poerror, poerror2;
 	float verror;
+    float prev_tar_q;
 	Packet input;
 
 	poerror = (upperbound(lowerbound(tar_q)) - angle);
+    poerror2 = (upperbound(lowerbound(tar_q)) - angle + 2*PI);
 	verror = (tar_qd - vel);
+    input.data = Kp*poerror + Kd*verror + tau_ff;
     
-    if(cnt < 1000){
-        if(poerror < -PI){
-            input.data = -Kp*poerror + Kd*verror + tau_ff;
+    if(prev_tar_q == tar_q){
+        if(abs(poerror) > abs(poerror2)){
+            input.data = Kp*poerror2 + Kd*verror + tau_ff;
         }  
-        else{input.data = Kp*poerror + Kd*verror + tau_ff;}
-        
     }
-	else{input.data = Kp*poerror + Kd*verror + tau_ff;}
 
     if (input.data > 1500) {
 		input.data = 1500;
@@ -368,6 +368,8 @@ int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, fl
 	else{
 		input.data = input.data;
 	}
+
+    prev_tar_q = tar_q;
     return input.data;
 }
 
