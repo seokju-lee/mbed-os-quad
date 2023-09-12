@@ -32,6 +32,7 @@ int              counter = 0;
 int              enabled = 0;
 int              init_enabled = 0;
 int              bytecount = 0;
+int              ctrl_cnt = 0;
 
 int              spi_enabled = 0;
 InterruptIn      cs(PA_4);
@@ -149,14 +150,14 @@ void countEncoder2(){
 }
 
 float lowerbound(float angle){
-    while(angle < 0){
+    while(angle < -2*PI){
         angle += 2*PI;
     }
     return angle;
 }
 
 float upperbound(float angle){
-    while(angle > 4*PI){
+    while(angle > 2*PI){
         angle -= 2*PI;
     }
     return angle;
@@ -224,7 +225,6 @@ void unpack_reply(CANMessage msg, leg_state* leg, int state){
         leg->a.angle = upperbound(lowerbound(init_angle_abad1 + fmod(((leg->a.p.data - l1_state_init.a.p.data) + 16383*cnta)*2*PI/163840, 4*PI)));
         leg->h.angle = upperbound(lowerbound(init_angle_hip1 + fmod(((leg->h.p.data - l1_state_init.h.p.data) + 16383*cnth)*2*PI/163840, 4*PI)));
         leg->k.angle = upperbound(lowerbound(init_angle_knee1 + fmod(((leg->k.p.data - l1_state_init.k.p.data) + 16383*cntk)*2*PI/163840, 4*PI)));
-	    
     }
     else if (state == 2){
         if (counter == 1){
@@ -342,25 +342,37 @@ void ExitMotorMode(CANMessage * msg){
     WriteAll();
 }
 
-int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ext){
-	float poerror;
+int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ff, int cnt){
+	float poerror, poerror2;
 	float verror;
-	float tau_ff;
 	Packet input;
 
 	poerror = (upperbound(lowerbound(tar_q)) - angle);
+    poerror2 = (upperbound(lowerbound(tar_q)) - angle)+2*PI;
 	verror = (tar_qd - vel);
-	input.data = Kp*poerror + Kd*verror;// + tau_ff + tau_ext;
+    
+    if(cnt == 0){
+        // printf("poerror1: %f\r\n", poerror);
+        // printf("poerror2: %f\r\n", poerror2);
+        // if(abs(poerror) > abs(poerror2)){
+        //     input.data = Kp*poerror2 + Kd*verror + tau_ff;
+        // }  
+        // else{input.data = Kp*poerror + Kd*verror + tau_ff;}
+        // printf("Torque: %d\r\n", input.data);
+        printf("Angle:%f \r\n", angle);
+    }
+	else{input.data = Kp*poerror + Kd*verror + tau_ff;}
 
-    if (input.data > 2000) {
-		input.data = 1999;
+    if (input.data > 1500) {
+		input.data = 1500;
 	}
-	else if (input.data < -2000){
-		input.data = -1999;
+	else if (input.data < -1500){
+		input.data = -1500;
 	}
 	else{
 		input.data = input.data;
 	}
+    
     return input.data;
 }
 
@@ -442,25 +454,25 @@ void spi_isr(void){
     WriteAll();
 }
 
-void convertcommand(){
-    spi_command.q_des_abad[0] += 2*PI;
-    spi_command.q_des_hip[0] += 2*PI;
-    spi_command.q_des_knee[0] += 2*PI;
+// void convertcommand(){
+//     spi_command.q_des_abad[0] += 2*PI;
+//     spi_command.q_des_hip[0] += 2*PI;
+//     spi_command.q_des_knee[0] += 2*PI;
 
-    spi_command.q_des_abad[1] += 2*PI;
-    spi_command.q_des_hip[1] += 2*PI;
-    spi_command.q_des_knee[1] += 2*PI;
-}
+//     spi_command.q_des_abad[1] += 2*PI;
+//     spi_command.q_des_hip[1] += 2*PI;
+//     spi_command.q_des_knee[1] += 2*PI;
+// }
 
-void convertdata(){
-    spi_data.q_abad[0] -= 2*PI;
-    spi_data.q_hip[0] -= 2*PI;
-    spi_data.q_knee[0] -= 2*PI;
+// void convertdata(){
+//     spi_data.q_abad[0] -= 2*PI;
+//     spi_data.q_hip[0] -= 2*PI;
+//     spi_data.q_knee[0] -= 2*PI;
 
-    spi_data.q_abad[1] -= 2*PI;
-    spi_data.q_hip[1] -= 2*PI;
-    spi_data.q_knee[1] -= 2*PI;
-}
+//     spi_data.q_abad[1] -= 2*PI;
+//     spi_data.q_hip[1] -= 2*PI;
+//     spi_data.q_knee[1] -= 2*PI;
+// }
 
 void control(){
     if(((spi_command.flags[0] & 0x1) == 1) && (enabled == 0)){
@@ -515,17 +527,15 @@ void control(){
     memset(&l1_control, 0, sizeof(l1_control));
     memset(&l2_control, 0, sizeof(l2_control));
 
-    convertcommand();
-    convertdata();
+    l1_control.a.tau.data = pdcontroller(spi_command.kp_abad[0], spi_command.kd_abad[0], l1_state.a.angle, l1_state.a.vel, spi_command.q_des_abad[0], spi_command.qd_des_abad[0], spi_command.tau_abad_ff[0], ctrl_cnt);
+    l1_control.h.tau.data = pdcontroller(spi_command.kp_hip[0], spi_command.kd_hip[0], l1_state.h.angle, l1_state.h.vel, spi_command.q_des_hip[0], spi_command.qd_des_hip[0], spi_command.tau_hip_ff[0], ctrl_cnt);
+    l1_control.k.tau.data = pdcontroller(spi_command.kp_knee[0], spi_command.kd_knee[0], l1_state.k.angle, l1_state.k.vel, spi_command.q_des_knee[0], spi_command.qd_des_knee[0], spi_command.tau_knee_ff[0], ctrl_cnt);
 
-    l1_control.a.tau.data = pdcontroller(spi_command.kp_abad[0], spi_command.kd_abad[0], l1_state.a.angle, l1_state.a.vel, spi_command.q_des_abad[0], spi_command.qd_des_abad[0], spi_command.tau_abad_ff[0]);
-    l1_control.h.tau.data = pdcontroller(spi_command.kp_hip[0], spi_command.kd_hip[0], l1_state.h.angle, l1_state.h.vel, spi_command.q_des_hip[0], spi_command.qd_des_hip[0], spi_command.tau_hip_ff[0]);
-    l1_control.k.tau.data = pdcontroller(spi_command.kp_knee[0], spi_command.kd_knee[0], l1_state.k.angle, l1_state.k.vel, spi_command.q_des_knee[0], spi_command.qd_des_knee[0], spi_command.tau_knee_ff[0]);
-    
-    l2_control.a.tau.data = pdcontroller(spi_command.kp_abad[1], spi_command.kd_abad[1], l2_state.a.angle, l2_state.a.vel, spi_command.q_des_abad[1], spi_command.qd_des_abad[1], spi_command.tau_abad_ff[1]);
-    l2_control.h.tau.data = pdcontroller(spi_command.kp_hip[1], spi_command.kd_hip[1], l2_state.h.angle, l2_state.h.vel, spi_command.q_des_hip[1], spi_command.qd_des_hip[1], spi_command.tau_hip_ff[1]);
-    l2_control.k.tau.data = pdcontroller(spi_command.kp_knee[1], spi_command.kd_knee[1], l2_state.k.angle, l2_state.k.vel, spi_command.q_des_knee[1], spi_command.qd_des_knee[1], spi_command.tau_knee_ff[1]);
+    l2_control.a.tau.data = pdcontroller(spi_command.kp_abad[1], spi_command.kd_abad[1], l2_state.a.angle, l2_state.a.vel, spi_command.q_des_abad[1], spi_command.qd_des_abad[1], spi_command.tau_abad_ff[1], ctrl_cnt);
+    l2_control.h.tau.data = pdcontroller(spi_command.kp_hip[1], spi_command.kd_hip[1], l2_state.h.angle, l2_state.h.vel, spi_command.q_des_hip[1], spi_command.qd_des_hip[1], spi_command.tau_hip_ff[1], ctrl_cnt);
+    l2_control.k.tau.data = pdcontroller(spi_command.kp_knee[1], spi_command.kd_knee[1], l2_state.k.angle, l2_state.k.vel, spi_command.q_des_knee[1], spi_command.qd_des_knee[1], spi_command.tau_knee_ff[1], ctrl_cnt);
 
+    ctrl_cnt++;
     spi_data.flags[0] = 0;
     spi_data.flags[1] = 0;
     spi_data.checksum = xor_checksum((uint32_t*)&spi_data, TX_LEN);
@@ -684,6 +694,6 @@ int main(){
         unpack_reply(rxMsg2, &l2_state, 2);
         can1.read(rxMsg1);
         unpack_reply(rxMsg1, &l1_state, 1);
-        wait_us(10);
+        wait_us(20);
     }
 }
