@@ -32,7 +32,6 @@ int              counter = 0;
 int              enabled = 0;
 int              init_enabled = 0;
 int              bytecount = 0;
-int              ctrl_cnt = 0;
 
 int              spi_enabled = 0;
 InterruptIn      cs(PA_4);
@@ -342,22 +341,14 @@ void ExitMotorMode(CANMessage * msg){
     WriteAll();
 }
 
-int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ff, int cnt){
-	float poerror, poerror2;
+int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, float tar_qd, float tau_ff){
+	float poerror;
 	float verror;
-    float prev_tar_q;
 	Packet input;
 
 	poerror = (upperbound(lowerbound(tar_q)) - angle);
-    poerror2 = (upperbound(lowerbound(tar_q)) - angle + 2*PI);
 	verror = (tar_qd - vel);
     input.data = Kp*poerror + Kd*verror + tau_ff;
-    
-    if(prev_tar_q == tar_q){
-        if(abs(poerror) > abs(poerror2)){
-            input.data = Kp*poerror2 + Kd*verror + tau_ff;
-        }  
-    }
 
     if (input.data > 1500) {
 		input.data = 1500;
@@ -369,9 +360,9 @@ int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, fl
 		input.data = input.data;
 	}
 
-    prev_tar_q = tar_q;
     return input.data;
 }
+
 
 void serial_isr(){
     while(pc.readable()){
@@ -524,15 +515,14 @@ void control(){
     memset(&l1_control, 0, sizeof(l1_control));
     memset(&l2_control, 0, sizeof(l2_control));
 
-    l1_control.a.tau.data = pdcontroller(spi_command.kp_abad[0], spi_command.kd_abad[0], l1_state.a.angle, l1_state.a.vel, spi_command.q_des_abad[0], spi_command.qd_des_abad[0], spi_command.tau_abad_ff[0], ctrl_cnt);
-    l1_control.h.tau.data = pdcontroller(spi_command.kp_hip[0], spi_command.kd_hip[0], l1_state.h.angle, l1_state.h.vel, spi_command.q_des_hip[0], spi_command.qd_des_hip[0], spi_command.tau_hip_ff[0], ctrl_cnt);
-    l1_control.k.tau.data = pdcontroller(spi_command.kp_knee[0], spi_command.kd_knee[0], l1_state.k.angle, l1_state.k.vel, spi_command.q_des_knee[0], spi_command.qd_des_knee[0], spi_command.tau_knee_ff[0], ctrl_cnt);
+    l1_control.a.tau.data = pdcontroller(spi_command.kp_abad[0], spi_command.kd_abad[0], l1_state.a.angle, l1_state.a.vel, spi_command.q_des_abad[0], spi_command.qd_des_abad[0], spi_command.tau_abad_ff[0]);
+    l1_control.h.tau.data = pdcontroller(spi_command.kp_hip[0], spi_command.kd_hip[0], l1_state.h.angle, l1_state.h.vel, spi_command.q_des_hip[0], spi_command.qd_des_hip[0], spi_command.tau_hip_ff[0]);
+    l1_control.k.tau.data = pdcontroller(spi_command.kp_knee[0], spi_command.kd_knee[0], l1_state.k.angle, l1_state.k.vel, spi_command.q_des_knee[0], spi_command.qd_des_knee[0], spi_command.tau_knee_ff[0]);
 
-    l2_control.a.tau.data = pdcontroller(spi_command.kp_abad[1], spi_command.kd_abad[1], l2_state.a.angle, l2_state.a.vel, spi_command.q_des_abad[1], spi_command.qd_des_abad[1], spi_command.tau_abad_ff[1], ctrl_cnt);
-    l2_control.h.tau.data = pdcontroller(spi_command.kp_hip[1], spi_command.kd_hip[1], l2_state.h.angle, l2_state.h.vel, spi_command.q_des_hip[1], spi_command.qd_des_hip[1], spi_command.tau_hip_ff[1], ctrl_cnt);
-    l2_control.k.tau.data = pdcontroller(spi_command.kp_knee[1], spi_command.kd_knee[1], l2_state.k.angle, l2_state.k.vel, spi_command.q_des_knee[1], spi_command.qd_des_knee[1], spi_command.tau_knee_ff[1], ctrl_cnt);
+    l2_control.a.tau.data = pdcontroller(spi_command.kp_abad[1], spi_command.kd_abad[1], l2_state.a.angle, l2_state.a.vel, spi_command.q_des_abad[1], spi_command.qd_des_abad[1], spi_command.tau_abad_ff[1]);
+    l2_control.h.tau.data = pdcontroller(spi_command.kp_hip[1], spi_command.kd_hip[1], l2_state.h.angle, l2_state.h.vel, spi_command.q_des_hip[1], spi_command.qd_des_hip[1], spi_command.tau_hip_ff[1]);
+    l2_control.k.tau.data = pdcontroller(spi_command.kp_knee[1], spi_command.kd_knee[1], l2_state.k.angle, l2_state.k.vel, spi_command.q_des_knee[1], spi_command.qd_des_knee[1], spi_command.tau_knee_ff[1]);
 
-    ctrl_cnt++;
     spi_data.flags[0] = 0;
     spi_data.flags[1] = 0;
     spi_data.checksum = xor_checksum((uint32_t*)&spi_data, TX_LEN);
