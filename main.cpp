@@ -238,8 +238,8 @@ void unpack_reply(CANMessage msg, leg_state* leg, int state){
         }
         countEncoder();
         leg->a.angle = upperbound(lowerbound(init_angle_abad1 + fmod(((leg->a.p.data) + 16383*cnta)*2*PI/163840, 4*PI)));
-        leg->h.angle = upperbound(lowerbound(init_angle_hip1 + fmod(((leg->h.p.data) + 16383*cnth)*2*PI/163840, 4*PI)) + 0.37607);
-        leg->k.angle = upperbound(lowerbound(init_angle_knee1 + fmod(((leg->k.p.data) + 16383*cntk)*2*PI/163840, 4*PI)) + 0.29807);
+        leg->h.angle = upperbound(lowerbound(init_angle_hip1 + fmod(((leg->h.p.data) + 16383*cnth)*2*PI/163840, 4*PI)) - 0.37607);
+        leg->k.angle = upperbound(lowerbound(init_angle_knee1 + fmod(((leg->k.p.data) + 16383*cntk)*2*PI/163840, 4*PI)) - 0.29807);
     }
     else if (state == 2){
         if (counter == 1){
