@@ -52,6 +52,7 @@ int16_t          prev_velk = 0;
 int              cnta = 0; 
 int              cnth = 0; 
 int              cntk = 0;
+bool             first_ctrl = true;
 
 uint16_t         prev_posa2 = 0;
 uint16_t         prev_posh2 = 0;
@@ -104,6 +105,21 @@ void save_init_data(CANMessage rx, leg_state_init * leg){
         }
         leg->k.p.data = leg->k.p.data >> 2;
     }
+}
+
+void initcontrol(CANMessage * msg, float tar_q){
+    msg->data[0] = 0xA3;
+    for (int i = 1; i < 4; i++){
+        msg->data[i] = 0x00;
+    }
+    for (int i = 4; i < 8; i++){
+        msg->data[i] = ((uint8_t*)(&tar_q))[i-4];
+    }
+}
+
+void ic1(CANMessage msg, float tar_q){
+    initcontrol(&msg, tar_q);
+    can1.write(msg);
 }
 
 void countEncoder(){
@@ -165,9 +181,9 @@ float upperbound(float angle){
 void unpack_reply(CANMessage msg, leg_state* leg, int state){
     if (state == 1){
         if (counter == 1){
-            init_angle_abad1 = ((float) l1_state_init.a.angle.data)*0.001*(PI/180);
-            init_angle_hip1 = ((float) l1_state_init.h.angle.data)*0.001*(PI/180);
-            init_angle_knee1 = ((float) l1_state_init.k.angle.data)*0.001*(PI/180);
+            init_angle_abad1 = 0;
+            init_angle_hip1 = 0;
+            init_angle_knee1 = 0;
         }
         else if (counter > 1){
             prev_posa = leg->a.p.data;
@@ -221,9 +237,9 @@ void unpack_reply(CANMessage msg, leg_state* leg, int state){
             }
         }
         countEncoder();
-        leg->a.angle = upperbound(lowerbound(init_angle_abad1 + fmod(((leg->a.p.data - l1_state_init.a.p.data) + 16383*cnta)*2*PI/163840, 4*PI)));
-        leg->h.angle = upperbound(lowerbound(init_angle_hip1 + fmod(((leg->h.p.data - l1_state_init.h.p.data) + 16383*cnth)*2*PI/163840, 4*PI)));
-        leg->k.angle = upperbound(lowerbound(init_angle_knee1 + fmod(((leg->k.p.data - l1_state_init.k.p.data) + 16383*cntk)*2*PI/163840, 4*PI)));
+        leg->a.angle = upperbound(lowerbound(init_angle_abad1 + fmod(((leg->a.p.data) + 16383*cnta)*2*PI/163840, 4*PI)));
+        leg->h.angle = upperbound(lowerbound(init_angle_hip1 + fmod(((leg->h.p.data) + 16383*cnth)*2*PI/163840, 4*PI)) + 0.37607);
+        leg->k.angle = upperbound(lowerbound(init_angle_knee1 + fmod(((leg->k.p.data) + 16383*cntk)*2*PI/163840, 4*PI)) + 0.29807);
     }
     else if (state == 2){
         if (counter == 1){
@@ -363,7 +379,6 @@ int16_t pdcontroller(float Kp, float Kd, float angle, float vel, float tar_q, fl
     return input.data;
 }
 
-
 void serial_isr(){
     while(pc.readable()){
         char c = pc.getc();
@@ -417,6 +432,7 @@ void spi_isr(void){
     GPIOC->ODR |= (1 << 8);
     GPIOC->ODR &= ~(1 << 8);
     int bytecount = 0;
+    float init_command_abad, init_command_hip, init_command_knee;
     SPI1->DR = tx_buff[0];
     while(cs.read() == 0){
         if(SPI1->SR & 0x1){
@@ -437,30 +453,25 @@ void spi_isr(void){
         spi_data.flags[1] = 0xdead;
     }
 
-    control();
-    PackAll();
-    WriteAll();
+    if(first_ctrl == true){
+        if((spi_command.q_des_abad[0] != 0) | (spi_command.q_des_hip[0] != 0) | (spi_command.q_des_knee[0] != 0)){
+            first_ctrl = false;
+        }
+        else{
+            ic1(a1_can, 0);
+            ic1(h1_can, 0);
+            ic1(k1_can, 0);
+        }
+    }
+    else{
+        control();
+        PackAll();
+        WriteAll();
+
+    }
+    
 }
 
-// void convertcommand(){
-//     spi_command.q_des_abad[0] += 2*PI;
-//     spi_command.q_des_hip[0] += 2*PI;
-//     spi_command.q_des_knee[0] += 2*PI;
-
-//     spi_command.q_des_abad[1] += 2*PI;
-//     spi_command.q_des_hip[1] += 2*PI;
-//     spi_command.q_des_knee[1] += 2*PI;
-// }
-
-// void convertdata(){
-//     spi_data.q_abad[0] -= 2*PI;
-//     spi_data.q_hip[0] -= 2*PI;
-//     spi_data.q_knee[0] -= 2*PI;
-
-//     spi_data.q_abad[1] -= 2*PI;
-//     spi_data.q_hip[1] -= 2*PI;
-//     spi_data.q_knee[1] -= 2*PI;
-// }
 
 void control(){
     if(((spi_command.flags[0] & 0x1) == 1) && (enabled == 0)){
@@ -646,14 +657,14 @@ int main(){
 
     rxMsg1.len = 8;
     rxMsg2.len = 8;
-    
+
     angleinit(a1_can, rxMsg1, &l1_state_init);
     angleinit2(a2_can, rxMsg2, &l2_state_init);
     angleinit(h1_can, rxMsg1, &l1_state_init);
     angleinit2(h2_can, rxMsg2, &l2_state_init);
     angleinit(k1_can, rxMsg1, &l1_state_init);
     angleinit2(k2_can, rxMsg2, &l2_state_init);
-    
+
     l1_control.a.tau.data = 0;
     l1_control.h.tau.data = 0;
     l1_control.k.tau.data = 0;
@@ -668,7 +679,7 @@ int main(){
     posinit2(h2_can, l2_control.h);    
     posinit(k1_can, l1_control.k);
     posinit2(k2_can, l2_control.k);
-    
+
     if(!spi_enabled){
         while((spi_enabled == 0) && (cs.read() == 0)){wait_us(10);}
         init_spi();
@@ -676,11 +687,16 @@ int main(){
     }
 
     while(1){
-        counter++;
-        can2.read(rxMsg2);
-        unpack_reply(rxMsg2, &l2_state, 2);
-        can1.read(rxMsg1);
-        unpack_reply(rxMsg1, &l1_state, 1);
-        wait_us(20);
+        if(first_ctrl == false){
+            counter++;
+            can2.read(rxMsg2);
+            unpack_reply(rxMsg2, &l2_state, 2);
+            can1.read(rxMsg1);
+            unpack_reply(rxMsg1, &l1_state, 1);
+            wait_us(20);
+        }
+        else{
+            wait_us(20);
+        }
     }
 }
